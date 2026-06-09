@@ -1,0 +1,18 @@
+[package]
+name = "edr-agent"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.102"
+clap = "4.6.1"
+ctrlc = "3.5.2"
+libbpf-rs = "0.25"
+libc = "0.2.186"
+object = "0.39.1"
+plain = "0.2.3"
+structopt = "0.3.26"
+time = "0.3.47"
+
+[build-dependencies]
+libbpf-cargo = "0.25"
