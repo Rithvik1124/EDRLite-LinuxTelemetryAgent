@@ -1,8 +1,5 @@
 mod detect;
 use core::time::Duration;
-use std::fs;
-use millisecond::Millisecond;
-use millisecond::MillisecondFormatter;
 use std::mem::MaybeUninit;
 use libbpf_rs::RingBufferBuilder;
 use libbpf_rs::skel::SkelBuilder as _;
@@ -27,44 +24,34 @@ use std::sync::Arc;
 mod trial {
     include!("trial.skel.rs");
 }
+
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 
-pub struct GenEvent {
-    pub event_type: u8,
 
-    pub pid: u32,
-    pub ppid: u32,
-    pub uid: u32,
-    pub gid: u32,
+struct ProcEvent{
+    event_type: u8,
+    pid: u32, //done - 4 bytes]
+    uid: u32, // 4 byte
+    gid: u32, //4 bytes
+    tgid: u32, //done - 4 bytes
+    ppid: u32,//done - 4 bytes
+    comm: [u8;16],//done - 16 bytes
+    exe: String,
+    cmdline: String,
+    filename: [u8; 512], //done - 512 bytes
+    time_stamp:u64,  //done - 8 bytes
 
-    pub tgid: u64,
-
-    pub comm: [u8; 16],
-    pub filename: [u8; 512],
-
-    pub dst_ip: u32,
-    pub dst_port: u16,
-
-    pub time_stamp: u64,
-}
-
-pub struct ProcEvent{
-    pub pid: u32,
-    pub ppid: u32,
-    
-    pub TargetFilename: [u8; 512],
 }
 
 
-unsafe impl Plain for GenEvent {}
+unsafe impl Plain for ProcEvent {}
 
-impl Default for GenEvent {
+impl Default for ProcEvent {
     fn default() -> Self {
         unsafe { std::mem::zeroed() }
     }
 }
-
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -72,7 +59,6 @@ struct EventHeader{
     event_type: u8,
 }
 
-/*
 #[repr(C)]
 
 struct FileEvent{
@@ -88,7 +74,7 @@ impl Default for FileEvent {
     fn default() -> Self {
         unsafe { std::mem::zeroed() }
     }
-}*/
+}
 
 #[derive(Debug, StructOpt)]
 struct Command {
@@ -106,18 +92,17 @@ struct Command {
 
 fn bump_memlock_rlimit() -> Result<()> {
     let rlimit = libc::rlimit {
-        rlim_cur: libc::RLIM_INFINITY,
-        rlim_max: libc::RLIM_INFINITY,
+        rlim_cur: 128 << 20,
+        rlim_max: 128 << 20,
     };
 
-    let ret = unsafe { libc::setrlimit(libc::RLIMIT_MEMLOCK, &rlimit) };
-
-    if ret != 0 {
-        bail!("Failed to increase rlimit: {}", std::io::Error::last_os_error());
+    if unsafe { libc::setrlimit(libc::RLIMIT_MEMLOCK, &rlimit) } != 0 {
+        bail!("Failed to increase rlimit");
     }
 
-    Ok(())
+    Ok(print!("RLIMIT Increased."))
 }
+
 fn convert_result_to_string(x: &[u8]) -> String {
     let mut output = String::new();
 
@@ -133,47 +118,39 @@ fn convert_result_to_string(x: &[u8]) -> String {
     return output;
 }
 
-fn nanosec_to_24_hr(nanosec: u64) -> std::string::String{
-    let computed_millis = nanosec/1000000;
-    let ms = Millisecond::from_nanos(computed_millis);
-    return ms.pretty();
 
-    
-}
-
-
-
-fn handle_proc_event( event: &GenEvent) {
-    //plain::copy_from_bytes(&mut event, data).expect("Event data buffer was too short");
-    let cmdline = match fs::read(format!("/proc/{}/cmdline", event.pid)) {
-    Ok(v) => v,
-    Err(_) => return , };
-    let mode = match event.event_type {
-        0 => "Execve",
-        1 => "Openat",
-        2 => "Connect",
-        _ => "Unknown",
-    };
-    if (convert_result_to_string(&cmdline)!="./target/debug/edr-agent"){
-         println!("Event Mode:{}, PID:{}, PPID:{}, UID:{}, GID:{}, TGID:{}, COMM:{:?}, FNAME:{:?}, TSTAMP:{:?}\n", mode,
+fn handle_proc_event( data: &[u8]) {
+    let mut event = ProcEvent::default();
+    plain::copy_from_bytes(&mut event, data).expect("Event data buffer was too short");
+    println!("Event PID:{}, PPID:{}, UID:{}, GID:{}, TGID:{}, COMM:{:?}, FNAME:{:?}, TSTAMP:{}\n", 
     event.pid,  event.ppid, 
     event.uid,  event.gid,
-    event.tgid, convert_result_to_string(&event.comm), convert_result_to_string(&event.filename), nanosec_to_24_hr(event.time_stamp),);
-    println!("cmdline:: {:?}",convert_result_to_string(&cmdline));
-
-    }
-   
+    event.tgid, convert_result_to_string(&event.comm),
+    convert_result_to_string(&event.filename), event.time_stamp,);
 }
 
+fn handle_file_event( data: &[u8]) {
+    let mut event = FileEvent::default();
+    plain::copy_from_bytes(&mut event, data).expect("Event data buffer was too short");
+    let x = convert_result_to_string(&event.filename);
+    let mut mode = "";
 
+    match event.operation{
+        1=>{
+            mode = "Open";
+        }
+        _=>{
+            mode = "idk";
+        }
+       
 
-
-fn check_event(event: &GenEvent){
-    let x = ProcEvent{TargetFilename:event.filename, 
+    }
+    if !(x == ""){
+        println!("Event PID:{},\n FNAME:{:?},\n OPERATION: {}\n", 
+    event.pid,  x,mode,);
 
     }
 }
-
 
 fn main() -> Result<()> {
     println!("Proc Event Stuff:\n");
@@ -191,25 +168,18 @@ fn main() -> Result<()> {
     skel.attach()?;
     let mut rb  = RingBufferBuilder::new();
     rb.add(&skel.maps.rb, |data| {
-    let mut event = GenEvent::default();
 
-    if plain::copy_from_bytes(&mut event, data).is_err() {
-        return 0;
+    let header =
+        unsafe { &*(data.as_ptr() as *const EventHeader) };
+
+    match header.event_type {
+        0 => handle_proc_event(data),
+        1 => handle_file_event(data),
+        _ => {}
     }
-    /*
-    println!(
-        "[RAW] type={} pid={} filename={}",
-        event.event_type,
-        event.pid,
-        convert_result_to_string(&event.filename)
-    );*/
 
-    //handle_event_type(&event);
+    0})?;
 
-    handle_proc_event(&event);
-
-    0
-})?;
     let rb = rb.build()?;
     
 
@@ -221,9 +191,8 @@ fn main() -> Result<()> {
 
     while running.load(Ordering::SeqCst) {
         rb.poll(Duration::from_millis(100))?;
-    }
+    }    
 
 
     Ok(())
 }
-
