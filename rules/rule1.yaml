@@ -16,11 +16,9 @@ detection:
     selection:
         Image|endswith: '/sudo'
         CommandLine|contains|all:
-            - ' tc '
-            - ' enp0s3 '
+            - ' ./target/debug/edr-agent '
         CommandLine|contains:
-            - ' qdisc '
-            - ' filter '
+            - ' ./target/debug/edr-agent '
     condition: selection
 falsepositives:
     - Unlikely

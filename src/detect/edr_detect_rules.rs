@@ -68,6 +68,9 @@ fn something(event: &Event) {
         if rule.is_match(event) {
             println!("MATCH: {}", rule.title);
         }
+        else {
+            println!("No event found match {:?}", &event)
+        }
     }
 }
 

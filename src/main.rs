@@ -184,12 +184,12 @@ fn check_event(event: &GenEvent){
     let x = json!({ "PID":event.pid, "PPID":event.ppid, 
                     "UID":  event.uid, "GID": event.gid,
                     "TGID":  event.tgid, "Comm": convert_result_to_string(&event.comm), 
-                    "Filename":convert_result_to_string(&event.filename), "TimeStamp": nanosec_to_24_hr(event.time_stamp),
-                    "CMDLINE":convert_result_to_string(&cmdline),
+                    "Image":convert_result_to_string(&event.filename), "TimeStamp": nanosec_to_24_hr(event.time_stamp),
+                    "CommandLine":convert_result_to_string(&cmdline),
 
     });
-    let y = x.to_string();
-    println!("{:?}",edr_detect_rules::match_rule(&y));
+    let y:&str = &x.to_string();
+    println!("This bitch:{} {:?}",&y,edr_detect_rules::match_rule(&y));
     
 }
 
