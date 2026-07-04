@@ -44,7 +44,7 @@ pub fn match_rule(event_json: &str) {
 
     // let event = event_from_json(r#"{"TargetFilename": "C:\\temp\\file.au3", "Image": "C:\\temp\\autoit4.exe", "Event": {"ID": 42}}"#,).unwrap();
     //let v: Value = sigma_rust::from_str(x).unwrap();
-    let event = event_from_json(&serde_json::to_string(event_json).unwrap());
+    let event = event_from_json(event_json);
    
     /*let event = event_from_json(
         r#"{"TargetFilename": "C:\\temp\\file.au3", "Image": "C:\\temp\\autoit4.exe"}"#

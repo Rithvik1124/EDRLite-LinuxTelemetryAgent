@@ -3,11 +3,13 @@ use core::time::Duration;
 use std::fs;
 use millisecond::Millisecond;
 use millisecond::MillisecondFormatter;
+use serde_json::json;
 use std::mem::MaybeUninit;
 use libbpf_rs::RingBufferBuilder;
 use libbpf_rs::skel::SkelBuilder as _;
 use libbpf_rs::skel::OpenSkel as _;
 use structopt::StructOpt;
+use std::string;
 use trial::*;
 use plain::Plain;
 use crate::detect::edr_detect_rules;
@@ -168,10 +170,27 @@ fn handle_proc_event( event: &GenEvent) {
 
 
 
-fn check_event(event: &GenEvent){
-    let x = ProcEvent{TargetFilename:event.filename, 
 
-    }
+fn check_event(event: &GenEvent){
+    let cmdline = match fs::read(format!("/proc/{}/cmdline", event.pid)) {
+    Ok(v) => v,
+    Err(_) => return , };
+    let mode = match event.event_type {
+        0 => "Execve",
+        1 => "Openat",
+        2 => "Connect",
+        _ => "Unknown",
+    };
+    let x = json!({ "PID":event.pid, "PPID":event.ppid, 
+                    "UID":  event.uid, "GID": event.gid,
+                    "TGID":  event.tgid, "Comm": convert_result_to_string(&event.comm), 
+                    "Filename":convert_result_to_string(&event.filename), "TimeStamp": nanosec_to_24_hr(event.time_stamp),
+                    "CMDLINE":convert_result_to_string(&cmdline),
+
+    });
+    let y = x.to_string();
+    println!("{:?}",edr_detect_rules::match_rule(&y));
+    
 }
 
 
@@ -206,7 +225,7 @@ fn main() -> Result<()> {
 
     //handle_event_type(&event);
 
-    handle_proc_event(&event);
+    check_event(&event);
 
     0
 })?;

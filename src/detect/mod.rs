@@ -23,5 +23,5 @@ fn load_rules(dir: &str) -> Vec<sigma_rust::Rule> {
 
 
 pub static RULES: Lazy<Vec<Rule>> = Lazy::new(|| {
-    load_rules("rule")
+    load_rules("../../rules")
 });
