@@ -14,11 +14,11 @@ logsource:
     product: linux
 detection:
     selection:
-        Image|endswith: '/sudo'
+        #Image|endswith: '/sudo'
         CommandLine|contains|all:
-            - ' ./target/debug/edr-agent '
+            - './target/debug/edr-agent'
         CommandLine|contains:
-            - ' ./target/debug/edr-agent '
+            - './target/debug/edr-agent'
     condition: selection
 falsepositives:
     - Unlikely
