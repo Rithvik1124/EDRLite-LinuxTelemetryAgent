@@ -17,13 +17,13 @@ char LICENSE[] SEC("license") = "GPL";
 #define AF_INET  2
 #define AF_INET6 10
 
-
 struct {
     __uint(type, BPF_MAP_TYPE_ARRAY);
     __uint(max_entries, 1);
     __type(key, __u32);
     __type(value, __u32);
 } agent_pid_map SEC(".maps");
+
 
 //created general event class bcoz too many class
 
@@ -74,12 +74,15 @@ SEC("tracepoint/syscalls/sys_enter_execve")
 int trace_enter_execve(struct trace_event_raw_sys_enter *ctx)
 {
     __u64 pid_tgid = bpf_get_current_pid_tgid();
-    __u32 pid = pid_tgid >> 32;
+    __u32 pid = (u32)pid_tgid;
+    __u32 tgid = pid_tgid >> 32;
+
+    
 
     __u32 key = 0;
-    __u32 *agent_pid = bpf_map_lookup_elem(&agent_pid_map, &key); //TwT - doesnt work for sum reason yet
+    __u32 *agent = bpf_map_lookup_elem(&agent_pid_map, &key);
 
-    if (agent_pid && pid == *agent_pid)
+    if (agent && *agent == tgid)
         return 0;
 
     struct gen_event *event = bpf_ringbuf_reserve(&rb, sizeof(*event), 0);
@@ -126,12 +129,13 @@ struct file_event {
 SEC("tracepoint/syscalls/sys_enter_openat")
 int trace_enter_openat(struct trace_event_raw_sys_enter *ctx)
 {
-    __u32 pid = bpf_get_current_pid_tgid() >> 32;
+    __u64 pid_tgid = bpf_get_current_pid_tgid();
+    __u32 pid = (u32)pid_tgid;
+    __u32 tgid = pid_tgid >> 32;
+     __u32 key = 0;
+    __u32 *agent = bpf_map_lookup_elem(&agent_pid_map, &key);
 
-    __u32 key = 0;
-    __u32 *agent_pid = bpf_map_lookup_elem(&agent_pid_map, &key); 
-
-    if (agent_pid && pid == *agent_pid)
+    if (agent && *agent == tgid)
         return 0;
 
     struct gen_event *event = bpf_ringbuf_reserve(&rb, sizeof(*event), 0);
@@ -161,12 +165,13 @@ struct network_event {
 SEC("tracepoint/syscalls/sys_enter_connect")
 int trace_enter_connect(struct trace_event_raw_sys_enter *ctx)
 {
-    __u32 pid = bpf_get_current_pid_tgid() >> 32;
+    __u64 pid_tgid = bpf_get_current_pid_tgid();
+    __u32 pid = (u32)pid_tgid;
+    __u32 tgid = pid_tgid >> 32;
+     __u32 key = 0;
+    __u32 *agent = bpf_map_lookup_elem(&agent_pid_map, &key);
 
-    __u32 key = 0;
-    __u32 *agent_pid = bpf_map_lookup_elem(&agent_pid_map, &key);
-
-    if (agent_pid && pid == *agent_pid)
+    if (agent && *agent == tgid)
         return 0;
 
     struct gen_event *event = bpf_ringbuf_reserve(&rb, sizeof(*event), 0);

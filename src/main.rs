@@ -8,6 +8,8 @@ use std::mem::MaybeUninit;
 use libbpf_rs::RingBufferBuilder;
 use libbpf_rs::skel::SkelBuilder as _;
 use libbpf_rs::skel::OpenSkel as _;
+use libbpf_rs::MapCore;
+use libbpf_rs::MapFlags;
 use structopt::StructOpt;
 use std::string;
 use trial::*;
@@ -198,6 +200,9 @@ fn main() -> Result<()> {
     let opts = Command::from_args();
 
     let mut skel_builder = TrialSkelBuilder::default();
+
+    let mut skel_builder = TrialSkelBuilder::default();
+
     if opts.verbose {
         skel_builder.obj_builder.debug(true);
     }
@@ -205,7 +210,17 @@ fn main() -> Result<()> {
     bump_memlock_rlimit()?;
     let mut open_object = MaybeUninit::uninit();
     let open_skel = skel_builder.open(&mut open_object)?;
+
+    // Sending userspace - ./target/debug/edr-agent PID to kernspace 'agent_tgid'
     let mut skel = open_skel.load()?;
+    let key: u32 = 0;
+    let value: u32 = std::process::id();
+
+    //Sends our edr-agent thread group id to the kernel agent_tgid map - kernel does the rest of the blocking, we've saved between 60-80% of cpu usage from this - else it was arounf 103 TwT
+
+    skel.maps
+    .agent_pid_map
+    .update(&key.to_ne_bytes(), &value.to_ne_bytes(), MapFlags::ANY)?;
     skel.attach()?;
     let mut rb  = RingBufferBuilder::new();
     rb.add(&skel.maps.rb, |data| {
