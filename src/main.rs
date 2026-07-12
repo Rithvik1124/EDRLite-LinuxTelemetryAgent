@@ -34,7 +34,6 @@ mod trial {
 
 pub struct GenEvent {
     pub event_type: u8,
-
     pub pid: u32,
     pub ppid: u32,
     pub uid: u32,
@@ -157,7 +156,7 @@ fn handle_proc_event( event: &GenEvent) {
         _ => "Unknown",
     };
     if (convert_result_to_string(&cmdline)!="./target/debug/edr-agent"){
-         println!("Event Mode:{}, PID:{}, PPID:{}, UID:{}, GID:{}, TGID:{}, COMM:{:?}, FNAME:{:?}, TSTAMP:{:?}\n", mode,
+         println!(" Event Mode:{}, PID:{}, PPID:{}, UID:{}, GID:{}, TGID:{}, COMM:{:?}, FNAME:{:?}, TSTAMP:{:?}\n",  mode,
     event.pid,  event.ppid, 
     event.uid,  event.gid,
     event.tgid, convert_result_to_string(&event.comm), convert_result_to_string(&event.filename), nanosec_to_24_hr(event.time_stamp),);
@@ -181,7 +180,7 @@ fn check_event(event: &GenEvent){
         2 => "Connect",
         _ => "Unknown",
     };
-    let x = json!({ "PID":event.pid, "PPID":event.ppid, 
+    let x = json!({ "Mode":mode,"PID":event.pid, "PPID":event.ppid, 
                     "UID":  event.uid, "GID": event.gid,
                     "TGID":  event.tgid, "Comm": convert_result_to_string(&event.comm), 
                     "Image":convert_result_to_string(&event.filename), "TimeStamp": nanosec_to_24_hr(event.time_stamp),
@@ -189,7 +188,7 @@ fn check_event(event: &GenEvent){
 
     });
     let y:&str = &x.to_string();
-    println!("This bitch:{} {:?}",&y,edr_detect_rules::match_rule(&y));
+    println!("This:{} {:?} \n",&y,edr_detect_rules::match_rule(&y));
     
 }
 
