@@ -190,7 +190,10 @@ fn check_event(event: &GenEvent){
 
     });
     let y:&str = &x.to_string();
-    println!("This:{} {:?} \n",&y,edr_detect_rules::match_rule(&y));
+    let rule_match = edr_detect_rules::match_rule(&y);
+    if rule_match!=(){
+        println!("Event:{} \n Rule:{:?}", &y, &rule_match);
+    }
     
 }
 
@@ -198,8 +201,6 @@ fn check_event(event: &GenEvent){
 fn main() -> Result<()> {
     println!("Proc Event Stuff:\n");
     let opts = Command::from_args();
-
-    let mut skel_builder = TrialSkelBuilder::default();
 
     let mut skel_builder = TrialSkelBuilder::default();
 

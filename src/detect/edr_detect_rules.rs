@@ -52,7 +52,6 @@ pub fn match_rule(event_json: &str) {
 
     match event {
     Ok(ev) => {
-        println!("Got event");
         something(&ev);
     }
     Err(e) => {
@@ -68,9 +67,10 @@ fn something(event: &Event) {
         if rule.is_match(event) {
             println!("MATCH: {}", rule.title);
         }
+        /*
         else {
             println!("No event found match {:?}", &event)
-        }
+        }*/
     }
 }
 
