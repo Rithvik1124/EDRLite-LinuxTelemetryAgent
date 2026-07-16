@@ -57,10 +57,9 @@ tracepoint:sched:sched_process_fork = 12
 tracepoint:sched:sched_process_exit = 13
 
 -- Files: 2x --
-tracepoint:syscalls:sys_enter_openat = 20
-tracepoint:syscalls:sys_enter_unlinkat = 21
-tracepoint:syscalls:sys_enter_renameat = 22
-tracepoint:syscalls:sys_enter_renameat2 = 23
+tracepoint:syscalls:sys_enter_unlinkat = 20
+tracepoint:syscalls:sys_enter_renameat = 21
+tracepoint:syscalls:sys_enter_renameat2 = 22
 
 -- Network: 3x --
 
@@ -68,19 +67,15 @@ tracepoint:syscalls:sys_enter_connect = 30
 tracepoint:syscalls:sys_enter_accept = 31
 tracepoint:syscalls:sys_enter_bind: 32
 
--- Socket messages: 4x --
-tracepoint:syscalls:sys_enter_sendmsg: 40
-tracepoint:syscalls:sys_enter_sendmmsg: 41
-tracepoint:syscalls:sys_enter_sendto: 42
 
--- Filesystem: 5x --
+-- Filesystem: 4x --
 
-tracepoint:syscalls:sys_enter_mount: 50
-tracepoint:syscalls:sys_enter_umount: 51
+tracepoint:syscalls:sys_enter_mount: 40
+tracepoint:syscalls:sys_enter_umount: 41
 
-Permissions: 6x
-tracepoint:syscalls:sys_enter_chown: 60
-tracepoint:syscalls:sys_enter_chmod: 61
+Permissions: 5x
+tracepoint:syscalls:sys_enter_chown: 50
+tracepoint:syscalls:sys_enter_chmod: 51
 
 */
 
@@ -113,7 +108,8 @@ struct {
 
 // SYSCALLS!!! ◝(ᵔᗜᵔ)◜
 
-//10
+//tracepoint:syscalls:sys_enter_execve = 10
+
 
 SEC("tracepoint/syscalls/sys_enter_execve")
 int trace_enter_execve(struct trace_event_raw_sys_enter *ctx)
@@ -159,7 +155,8 @@ int trace_enter_execve(struct trace_event_raw_sys_enter *ctx)
     return 0;
 }
 
-//11
+//tracepoint:sched:sched_process_exec = 11
+
 SEC("tracepoint/sched/sched_process_exec")
 int trace_process_exec(struct trace_event_raw_sched_process_exec *ctx)
 {
@@ -206,8 +203,7 @@ int trace_process_exec(struct trace_event_raw_sched_process_exec *ctx)
     return 0;
 }
 
-//12
-
+//tracepoint:sched:sched_process_fork = 12
 
 SEC("tracepoint/sched/sched_process_fork")
 int trace_process_fork(struct trace_event_raw_sched_process_fork *ctx)
@@ -247,8 +243,7 @@ int trace_process_fork(struct trace_event_raw_sched_process_fork *ctx)
     return 0;
 }
 
-//13
-
+//tracepoint:sched:sched_process_exit = 13
 
 SEC("tracepoint/sched/sched_process_exit")
 int trace_process_exit(struct trace_event_raw_sched_process_exit *ctx)
@@ -304,10 +299,18 @@ struct file_event {
 
 //FileSystems 2x
 
-//20 tracepoint:syscalls:sys_enter_openat
+/*
+struct network_event {
+    __u8 event_type;
+    __u32 pid; //done - 4 bytes]
+    char filename[16]; //done - 512 bytes
+};*/
 
-SEC("tracepoint/syscalls/sys_enter_openat")
-int trace_enter_openat(struct trace_event_raw_sys_enter *ctx)
+//20 tracepoint:syscalls:sys_enter_unlinkat
+
+
+SEC("tracepoint/syscalls/sys_enter_unlinkat")
+int trace_enter_unlinkat(struct trace_event_raw_sys_enter *ctx)
 {
     __u64 pid_tgid = bpf_get_current_pid_tgid();
     __u32 pid = (u32)pid_tgid;
@@ -337,18 +340,11 @@ int trace_enter_openat(struct trace_event_raw_sys_enter *ctx)
     return 0;
 }
 
-/*
-struct network_event {
-    __u8 event_type;
-    __u32 pid; //done - 4 bytes]
-    char filename[16]; //done - 512 bytes
-};*/
-
-//21 tracepoint:syscalls:sys_enter_unlinkat
+//21 tracepoint:syscalls:sys_enter_renameat
 
 
-SEC("tracepoint/syscalls/sys_enter_unlinkat")
-int trace_enter_unlinkat(struct trace_event_raw_sys_enter *ctx)
+SEC("tracepoint/syscalls/sys_enter_renameat")
+int trace_enter_renameat(struct trace_event_raw_sys_enter *ctx)
 {
     __u64 pid_tgid = bpf_get_current_pid_tgid();
     __u32 pid = (u32)pid_tgid;
@@ -378,41 +374,7 @@ int trace_enter_unlinkat(struct trace_event_raw_sys_enter *ctx)
     return 0;
 }
 
-//22 tracepoint:syscalls:sys_enter_renameat
-
-
-SEC("tracepoint/syscalls/sys_enter_renameat")
-int trace_enter_renameat(struct trace_event_raw_sys_enter *ctx)
-{
-    __u64 pid_tgid = bpf_get_current_pid_tgid();
-    __u32 pid = (u32)pid_tgid;
-    __u32 tgid = pid_tgid >> 32;
-     __u32 key = 0;
-    __u32 *agent = bpf_map_lookup_elem(&agent_pid_map, &key);
-
-    if (agent && *agent == tgid)
-        return 0;
-
-    struct gen_event *event = bpf_ringbuf_reserve(&rb, sizeof(*event), 0);
-    if (!event)
-        return 0;
-
-    event->event_type = 22;
-    event->pid = pid;
-
-    const char *filename = (const char *)ctx->args[1];
-    bpf_probe_read_user_str(
-        event->filename,
-        sizeof(event->filename),
-        filename);
-    struct task_struct *task = (struct task_struct *)bpf_get_current_task();
-    event->ppid = BPF_CORE_READ(task, real_parent, tgid);
-
-    bpf_ringbuf_submit(event, 0);
-    return 0;
-}
-
-// 23 tracepoint:syscalls:sys_enter_renameat2
+// 22 tracepoint:syscalls:sys_enter_renameat2
 
 
 SEC("tracepoint/syscalls/sys_enter_renameat2")
@@ -431,7 +393,7 @@ int trace_enter_renameat2(struct trace_event_raw_sys_enter *ctx)
     if (!event)
         return 0;
 
-    event->event_type = 23;
+    event->event_type = 22;
     event->pid = pid;
 
     const char *filename = (const char *)ctx->args[1];
@@ -559,122 +521,7 @@ int trace_enter_bind(struct trace_event_raw_sys_enter *ctx)
     return 0;
 }
 
-
-//40 tracepoint:syscalls:sys_enter_sendmsg
-SEC("tracepoint/syscalls/sys_enter_sendmsg")
-int trace_enter_sendmsg(struct trace_event_raw_sys_enter *ctx)
-{
-    __u64 pid_tgid = bpf_get_current_pid_tgid();
-    __u32 pid = (u32)pid_tgid;
-    __u32 tgid = pid_tgid >> 32;
-     __u32 key = 0;
-    __u32 *agent = bpf_map_lookup_elem(&agent_pid_map, &key);
-
-    if (agent && *agent == tgid)
-        return 0;
-
-    struct gen_event *event = bpf_ringbuf_reserve(&rb, sizeof(*event), 0);
-    if (!event)
-        return 0;
-
-    event->event_type = 2;
-    event->pid = pid;
-
-    struct sockaddr_in addr4 = {};
-
-    if (bpf_probe_read_user(&addr4, sizeof(addr4),
-                            (const void *)ctx->args[1]) == 0) {
-
-        if (addr4.sin_family == AF_INET) {
-            event->dst_port = __builtin_bswap16(addr4.sin_port);
-            event->dst_ip = addr4.sin_addr.s_addr;
-        }
-    }
-    struct task_struct *task = (struct task_struct *)bpf_get_current_task();
-    event->ppid = BPF_CORE_READ(task, real_parent, tgid);
-
-    bpf_ringbuf_submit(event, 0);
-    return 0;
-}
-
-
-//41 tracepoint:syscalls:sys_enter_sendmmsg
-SEC("tracepoint/syscalls/sys_enter_sendmmsg")
-int trace_enter_sendmmsg(struct trace_event_raw_sys_enter *ctx)
-{
-    __u64 pid_tgid = bpf_get_current_pid_tgid();
-    __u32 pid = (u32)pid_tgid;
-    __u32 tgid = pid_tgid >> 32;
-     __u32 key = 0;
-    __u32 *agent = bpf_map_lookup_elem(&agent_pid_map, &key);
-
-    if (agent && *agent == tgid)
-        return 0;
-
-    struct gen_event *event = bpf_ringbuf_reserve(&rb, sizeof(*event), 0);
-    if (!event)
-        return 0;
-
-    event->event_type = 2;
-    event->pid = pid;
-
-    struct sockaddr_in addr4 = {};
-
-    if (bpf_probe_read_user(&addr4, sizeof(addr4),
-                            (const void *)ctx->args[1]) == 0) {
-
-        if (addr4.sin_family == AF_INET) {
-            event->dst_port = __builtin_bswap16(addr4.sin_port);
-            event->dst_ip = addr4.sin_addr.s_addr;
-        }
-    }
-    struct task_struct *task = (struct task_struct *)bpf_get_current_task();
-    event->ppid = BPF_CORE_READ(task, real_parent, tgid);
-
-    bpf_ringbuf_submit(event, 0);
-    return 0;
-}
-
-
-
-//42 tracepoint:syscalls:sys_enter_sendto
-SEC("tracepoint/syscalls/sys_enter_sendto")
-int trace_enter_sendto(struct trace_event_raw_sys_enter *ctx)
-{
-    __u64 pid_tgid = bpf_get_current_pid_tgid();
-    __u32 pid = (u32)pid_tgid;
-    __u32 tgid = pid_tgid >> 32;
-     __u32 key = 0;
-    __u32 *agent = bpf_map_lookup_elem(&agent_pid_map, &key);
-
-    if (agent && *agent == tgid)
-        return 0;
-
-    struct gen_event *event = bpf_ringbuf_reserve(&rb, sizeof(*event), 0);
-    if (!event)
-        return 0;
-
-    event->event_type = 2;
-    event->pid = pid;
-
-    struct sockaddr_in addr4 = {};
-
-    if (bpf_probe_read_user(&addr4, sizeof(addr4),
-                            (const void *)ctx->args[1]) == 0) {
-
-        if (addr4.sin_family == AF_INET) {
-            event->dst_port = __builtin_bswap16(addr4.sin_port);
-            event->dst_ip = addr4.sin_addr.s_addr;
-        }
-    }
-    struct task_struct *task = (struct task_struct *)bpf_get_current_task();
-    event->ppid = BPF_CORE_READ(task, real_parent, tgid);
-
-    bpf_ringbuf_submit(event, 0);
-    return 0;
-}
-
-// tracepoint:syscalls:sys_enter_mount: 50
+// tracepoint:syscalls:sys_enter_mount: 40
 SEC("tracepoint/syscalls/sys_enter_mount")
 int trace_enter_mount(struct trace_event_raw_sys_enter *ctx)
 {
@@ -691,7 +538,7 @@ int trace_enter_mount(struct trace_event_raw_sys_enter *ctx)
     if (!event)
         return 0;
 
-    event->event_type = 2;
+    event->event_type = 40;
     event->pid = pid;
 
     struct sockaddr_in addr4 = {};
@@ -711,6 +558,8 @@ int trace_enter_mount(struct trace_event_raw_sys_enter *ctx)
     return 0;
 }
 
+
+// tracepoint:syscalls:sys_enter_mount: 41
 SEC("tracepoint/syscalls/sys_enter_umount")
 int trace_enter_umount(struct trace_event_raw_sys_enter *ctx)
 {
@@ -727,7 +576,7 @@ int trace_enter_umount(struct trace_event_raw_sys_enter *ctx)
     if (!event)
         return 0;
 
-    event->event_type = 2;
+    event->event_type = 41;
     event->pid = pid;
 
     struct sockaddr_in addr4 = {};
@@ -748,4 +597,78 @@ int trace_enter_umount(struct trace_event_raw_sys_enter *ctx)
 }
 
 
-// tracepoint:syscalls:sys_enter_umount: 51
+// tracepoint:syscalls:sys_enter_chown: 50
+SEC("tracepoint/syscalls/sys_enter_chown")
+int trace_enter_chown(struct trace_event_raw_sys_enter *ctx)
+{
+    __u64 pid_tgid = bpf_get_current_pid_tgid();
+    __u32 pid = (u32)pid_tgid;
+    __u32 tgid = pid_tgid >> 32;
+     __u32 key = 0;
+    __u32 *agent = bpf_map_lookup_elem(&agent_pid_map, &key);
+
+    if (agent && *agent == tgid)
+        return 0;
+
+    struct gen_event *event = bpf_ringbuf_reserve(&rb, sizeof(*event), 0);
+    if (!event)
+        return 0;
+
+    event->event_type = 50;
+    event->pid = pid;
+
+    struct sockaddr_in addr4 = {};
+
+    if (bpf_probe_read_user(&addr4, sizeof(addr4),
+                            (const void *)ctx->args[1]) == 0) {
+
+        if (addr4.sin_family == AF_INET) {
+            event->dst_port = __builtin_bswap16(addr4.sin_port);
+            event->dst_ip = addr4.sin_addr.s_addr;
+        }
+    }
+    struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+    event->ppid = BPF_CORE_READ(task, real_parent, tgid);
+
+    bpf_ringbuf_submit(event, 0);
+    return 0;
+}
+
+
+
+// tracepoint:syscalls:sys_enter_chmod: 51
+SEC("tracepoint/syscalls/sys_enter_chmod")
+int trace_enter_chmod(struct trace_event_raw_sys_enter *ctx)
+{
+    __u64 pid_tgid = bpf_get_current_pid_tgid();
+    __u32 pid = (u32)pid_tgid;
+    __u32 tgid = pid_tgid >> 32;
+     __u32 key = 0;
+    __u32 *agent = bpf_map_lookup_elem(&agent_pid_map, &key);
+
+    if (agent && *agent == tgid)
+        return 0;
+
+    struct gen_event *event = bpf_ringbuf_reserve(&rb, sizeof(*event), 0);
+    if (!event)
+        return 0;
+
+    event->event_type = 51;
+    event->pid = pid;
+
+    struct sockaddr_in addr4 = {};
+
+    if (bpf_probe_read_user(&addr4, sizeof(addr4),
+                            (const void *)ctx->args[1]) == 0) {
+
+        if (addr4.sin_family == AF_INET) {
+            event->dst_port = __builtin_bswap16(addr4.sin_port);
+            event->dst_ip = addr4.sin_addr.s_addr;
+        }
+    }
+    struct task_struct *task = (struct task_struct *)bpf_get_current_task();
+    event->ppid = BPF_CORE_READ(task, real_parent, tgid);
+
+    bpf_ringbuf_submit(event, 0);
+    return 0;
+}

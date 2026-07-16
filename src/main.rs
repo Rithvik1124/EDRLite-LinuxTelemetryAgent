@@ -18,6 +18,7 @@ use crate::detect::edr_detect_rules;
 use libbpf_rs::skel::Skel;
 use anyhow::{anyhow, bail, Context, Result};
 
+use sigma_rust::{Event, Rule, event_from_json, rule_from_yaml};
 
 //might be useful, don't remove
 //use std::fs;
@@ -169,7 +170,41 @@ fn handle_proc_event( event: &GenEvent) {
 }
 
 
+/*
 
+fn check_event(event: &GenEvent){
+    let cmdline = match fs::read(format!("/proc/{}/cmdline", event.pid)) {
+    Ok(v) => v,
+    Err(_) => return , };
+    
+    let x = create_event(event, &mode).unwrap();
+    let rule_match = edr_detect_rules::match_rule(&x);
+    //if rule_match!=(){   
+    println!("Event:{:?} \n Rule:{:?}", &x, &rule_match);}
+*/
+
+
+fn create_event(buff_event: &GenEvent, mode: &str) -> anyhow::Result<Event>{
+    //creates event rather than doing json-str-event stuff done in edr_detect_rules.rs
+    let mut event = Event::new();
+    let cmdline = match fs::read(format!("/proc/{}/cmdline", buff_event.pid)) {
+        Ok(bytes) => convert_result_to_string(&bytes),
+        Err(_) => "cmdline expired".to_string(),
+    };
+        event.insert("Mode", mode);
+        event.insert("PID", buff_event.pid);
+        event.insert("PPID", buff_event.ppid);
+        event.insert("UID", buff_event.uid);
+        event.insert("GID", buff_event.gid);
+        event.insert("TGID", buff_event.tgid);
+        event.insert("Image", convert_result_to_string(&buff_event.filename));
+        event.insert("TimeStamp", nanosec_to_24_hr(buff_event.time_stamp));
+        event.insert("CommandLine", cmdline);
+    
+    
+     return Ok(event);
+
+    }
 
 
 fn check_event(event: &GenEvent){
@@ -177,22 +212,26 @@ fn check_event(event: &GenEvent){
     Ok(v) => v,
     Err(_) => return , };
     let mode = match event.event_type {
-        0 => "Execve",
-        1 => "Openat",
-        2 => "Connect",
-        _ => "Unknown",
+        10 => "Execve",
+        11 => "Fork",
+        12 => "Exit",
+        13 => "Execveat",
+        20 => "Unlinkat",
+        21 => "Renameat",
+        22=> "Renameat2",
+        30 => "Connect",
+        31 => "Accept",
+        32 => "Bind",
+        40 => "Mount",
+        41 => "Unmount",
+        50 => "Chown",
+        51 => "Chmod",  
+        _=> "Unknown", 
     };
-    let x = json!({ "Mode":mode,"PID":event.pid, "PPID":event.ppid, 
-                    "UID":  event.uid, "GID": event.gid,
-                    "TGID":  event.tgid, "Comm": convert_result_to_string(&event.comm), 
-                    "Image":convert_result_to_string(&event.filename), "TimeStamp": nanosec_to_24_hr(event.time_stamp),
-                    "CommandLine":convert_result_to_string(&cmdline),
-
-    });
-    let y:&str = &x.to_string();
-    let rule_match = edr_detect_rules::match_rule(&y);
+    let x = create_event(event, mode).unwrap();
+    let rule_match = edr_detect_rules::match_rule(&x);
     if rule_match!=(){
-        println!("Event:{} \n Rule:{:?}", &y, &rule_match);
+        println!("Event:{:?} \n Rule:{:?}", &x, &rule_match);
     }
     
 }
@@ -200,6 +239,7 @@ fn check_event(event: &GenEvent){
 
 fn main() -> Result<()> {
     println!("Proc Event Stuff:\n");
+    println!("My PID: {}",std::process::id() );
     let opts = Command::from_args();
 
     let mut skel_builder = TrialSkelBuilder::default();

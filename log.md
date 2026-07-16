@@ -19,3 +19,21 @@
 
 **Conclusion:** Giving a brief read to the documentation would've been helpful, and libbpf-c would be a better choice if I wasn't so adamant on trying the "next best language"
 
+### 17/07/2026
+Okay so a major improvement from last time somehow we've gone from 104% cpu usage to ~1.5% usage, idk if I trust it, everything works as it's supposed to but how?
+anyways, all I need to do now is get back to the caching and stuff for proc tree and more optimization(idk if its even worth the time tbh or the reward)
+
+What else? other than the responding part I need to get done with yara and ioc for network and file stuff, get a bit more widespread sigma rules, and yeah
+
+My plan:
+
+if we identify something malicious, we first:
+log everything being done below:
+ -- isolate automatically through systemd-run and make every bin stuff into read only(idk how plausible ts is but let's see)
+ -- cut off network in case of a suspected breach then kill any and every process related to the breach
+ -- just send every log and stuff to the server and maybe if plausible(idk what plausible means) create a vm link to the server for better recovering and response
+ -- maybe find a way to make backup flakes or snapshots if it is plausible(x3)
+
+hope to god I don't crash out
+
+

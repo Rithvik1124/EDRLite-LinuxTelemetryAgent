@@ -27,9 +27,9 @@ fn load_rules(dir: &str) -> Vec<sigma_rust::Rule> {
 }*/
 
 
+/*
 
-
-pub fn match_rule(event_json: &str) {
+pub fn match_rule(event_json: &Event) {
     //let mut file = File::open(file).expect("Unable to open file");
     //let mut contents = String::new();
 
@@ -59,18 +59,17 @@ pub fn match_rule(event_json: &str) {
     }
     }
 
-}
+}*/
 
 
-fn something(event: &Event) {
+pub fn match_rule(event: &Event) {
     for rule in RULES.iter() {
         if rule.is_match(event) {
             println!("MATCH: {}", rule.title);
         }
-        /*
         else {
             println!("No event found match {:?}", &event)
-        }*/
+        }
     }
 }
 
