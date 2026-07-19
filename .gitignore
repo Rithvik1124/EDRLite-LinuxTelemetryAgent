@@ -1,3 +1,5 @@
 /ResearchStuff
 /target
 todo.md
+/client/target/*
+/server/target/*
