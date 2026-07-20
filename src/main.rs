@@ -53,12 +53,13 @@ pub struct GenEvent {
     pub time_stamp: u64,
 }
 
+/*
 pub struct ProcEvent{
     pub pid: u32,
     pub ppid: u32,
     
     pub TargetFilename: [u8; 512],
-}
+}*/
 
 
 unsafe impl Plain for GenEvent {}

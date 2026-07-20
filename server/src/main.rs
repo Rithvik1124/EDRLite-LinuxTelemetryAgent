@@ -1,27 +1,60 @@
-use kafka::consumer::{Consumer, FetchOffset};
-use std::str;
 
-fn main () {
+use crate::config::KafkaConfig;
+use crate::error::KafkaResult;
+use crate::kafka::consumer::MessageHandler;
+use crate::kafka::{EventConsumer, EventProducer};
+use async_trait::async_trait;
+use std::time::Duration;
+use chrono::Utc;
 
- let hosts = vec!["localhost:9092".to_owned()];
- 
- let mut consumer =
-   Consumer::from_hosts(hosts)
-     .with_topic("topic-name".to_owned())
-     .with_fallback_offset(FetchOffset::Latest)
-     .create()
-     .unwrap();
+mod config;
+mod error;
+mod kafka;
 
- loop {
-   for ms in consumer.poll().unwrap().iter() {
-     for m in ms.messages() {
-       // If the consumer receives an event, this block is executed
-       println!("{:?}", str::from_utf8(m.value).unwrap());
-     }
+struct MessagePrinter {}
 
-     consumer.consume_messageset(ms).unwrap();
-   }
+impl MessagePrinter {
+    fn new() -> Box<Self> {
+        Box::new(MessagePrinter {})
+    }
+}
 
-   consumer.commit_consumed().unwrap();
- }
+#[async_trait]
+impl MessageHandler for MessagePrinter {
+    async fn handle(&self, key: &[u8], payload: &[u8]) -> KafkaResult<()> {
+        println!("Key: {}", String::from_utf8_lossy(key));
+        println!("Payload: {}", String::from_utf8_lossy(payload));
+
+        Ok(())
+    }
+}
+
+#[tokio::main]
+async fn main() -> KafkaResult<()> {
+    tracing_subscriber::fmt::init();
+    
+    let config = KafkaConfig::default();
+
+    let producer = EventProducer::new(config.clone())?;
+    let consumer = EventConsumer::new(config, MessagePrinter::new())?;
+
+    tokio::task::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(1));
+        loop {
+            tokio::select! {
+                _ = interval.tick() => {
+                    let key = Utc::now().timestamp().to_string();
+                    match producer.send_event(&key, "I'm a payload").await {
+                        Ok(_) => {}
+                        Err(e) => {
+                            tracing::error!("{:?}", e);
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    consumer.start().await?;
+    Ok(())
 }
