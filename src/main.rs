@@ -1,8 +1,10 @@
 mod detect;
 use core::time::Duration;
+use std::collections::HashMap;
 use std::fs;
 use millisecond::Millisecond;
 use millisecond::MillisecondFormatter;
+use serde_json::Value;
 use serde_json::json;
 use std::mem::MaybeUninit;
 use libbpf_rs::RingBufferBuilder;
@@ -33,6 +35,8 @@ use std::sync::Arc;
 mod trial {
     include!("trial.skel.rs");
 }
+
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug,)]
 
@@ -52,9 +56,9 @@ pub struct GenEvent {
     pub dst_port: u16,
 
     pub time_stamp: u64,
-}
+} 
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Default, Debug, Serialize, Deserialize)]
 pub struct TelemetryEvent {     // this struct can be eliminated by adding a conversion method to GenEvent
     pub event_type: u8,         // then we can simply call the method instead of having to assign everythin manually in main block
     pub pid: u32,
@@ -70,7 +74,7 @@ pub struct TelemetryEvent {     // this struct can be eliminated by adding a con
     pub dst_port: u16,
 
     pub time_stamp: u64,
-}
+} 
 /*
 pub struct ProcEvent{
     pub pid: u32,
@@ -166,27 +170,6 @@ fn nanosec_to_24_hr(nanosec: u64) -> std::string::String{
 
 
 
-fn handle_proc_event( event: &GenEvent) {
-    //plain::copy_from_bytes(&mut event, data).expect("Event data buffer was too short");
-    let cmdline = match fs::read(format!("/proc/{}/cmdline", event.pid)) {
-    Ok(v) => v,
-    Err(_) => return , };
-    let mode = match event.event_type {
-        0 => "Execve",
-        1 => "Openat",
-        2 => "Connect",
-        _ => "Unknown",
-    };
-    if (convert_result_to_string(&cmdline)!="./target/debug/edr-agent"){
-         println!(" Event Mode:{}, PID:{}, PPID:{}, UID:{}, GID:{}, TGID:{}, COMM:{:?}, FNAME:{:?}, TSTAMP:{:?}\n",  mode,
-    event.pid,  event.ppid, 
-    event.uid,  event.gid,
-    event.tgid, convert_result_to_string(&event.comm), convert_result_to_string(&event.filename), nanosec_to_24_hr(event.time_stamp),);
-    println!("cmdline:: {:?}",convert_result_to_string(&cmdline));
-
-    }
-   
-}
 
 
 /*
@@ -203,55 +186,46 @@ fn check_event(event: &GenEvent){
 */
 
 
-fn create_event(buff_event: &GenEvent, mode: &str) -> anyhow::Result<Event>{
-    //creates event rather than doing json-str-event stuff done in edr_detect_rules.rs
-    let mut event = Event::new();
+
+
+
+fn make_event(buff_event: &GenEvent)-> HashMap<String, String>{
+    let cmdline = match fs::read(format!("/proc/{}/cmdline", buff_event.pid)) {
+    Ok(v) => convert_result_to_string(&v),
+    Err(_) =>"cmdline expired".to_string(), };
+    let mode :String= match buff_event.event_type {
+        10 => "Execve".to_string(),
+        11 => "Fork".to_string(),
+        12 => "Exit".to_string(),
+        13 => "Execveat".to_string(),
+        20 => "Unlinkat".to_string(),
+        21 => "Renameat".to_string(),
+        22=> "Renameat2".to_string(),
+        30 => "Connect".to_string(),
+        31 => "Accept".to_string(),
+        32 => "Bind".to_string(),
+        40 => "Mount".to_string(),
+        41 => "Unmount".to_string(),
+        50 => "Chown".to_string(),
+        51 => "Chmod".to_string(),  
+        _=> "Unknown".to_string(), 
+    };
+    let mut event = HashMap::<String, String>::new();
     let cmdline = match fs::read(format!("/proc/{}/cmdline", buff_event.pid)) {
         Ok(bytes) => convert_result_to_string(&bytes),
         Err(_) => "cmdline expired".to_string(),
     };
-        event.insert("Mode", mode);
-        event.insert("PID", buff_event.pid);
-        event.insert("PPID", buff_event.ppid);
-        event.insert("UID", buff_event.uid);
-        event.insert("GID", buff_event.gid);
-        event.insert("TGID", buff_event.tgid);
-        event.insert("Image", convert_result_to_string(&buff_event.filename));
-        event.insert("TimeStamp", nanosec_to_24_hr(buff_event.time_stamp));
-        event.insert("CommandLine", cmdline);
+        event.insert("Mode".to_string(), mode);
+        event.insert("PID".to_string(), buff_event.pid.to_string());
+        event.insert("PPID".to_string(), buff_event.ppid.to_string());
+        event.insert("UID".to_string(), buff_event.uid.to_string());
+        event.insert("GID".to_string(), buff_event.gid.to_string());
+        event.insert("TGID".to_string(), buff_event.tgid.to_string());
+        event.insert("Image".to_string(), convert_result_to_string(&buff_event.filename));
+        event.insert("TimeStamp".to_string(), nanosec_to_24_hr(buff_event.time_stamp));
+        event.insert("CommandLine".to_string(), cmdline);
+    event
     
-    
-     return Ok(event);
-
-    }
-
-
-fn check_event(event: &GenEvent){
-    let cmdline = match fs::read(format!("/proc/{}/cmdline", event.pid)) {
-    Ok(v) => v,
-    Err(_) => return , };
-    let mode = match event.event_type {
-        10 => "Execve",
-        11 => "Fork",
-        12 => "Exit",
-        13 => "Execveat",
-        20 => "Unlinkat",
-        21 => "Renameat",
-        22=> "Renameat2",
-        30 => "Connect",
-        31 => "Accept",
-        32 => "Bind",
-        40 => "Mount",
-        41 => "Unmount",
-        50 => "Chown",
-        51 => "Chmod",  
-        _=> "Unknown", 
-    };
-    let x = create_event(event, mode).unwrap();
-    let rule_match = edr_detect_rules::match_rule(&x);
-    if rule_match!=(){
-        println!("Event:{:?} \n Rule:{:?}", &x, &rule_match);
-    }
     
 }
 
@@ -261,15 +235,15 @@ async fn main() -> Result<()> {
     println!("My PID: {}",std::process::id() );
     let opts = Command::from_args();
     let client = Client::new();
-    let (tx, mut rx) = mpsc::channel::<TelemetryEvent>(1024); // 1024 is the channel capacity
+
+    let (tx, mut rx) = mpsc::channel::<serde_json::Value>(1024); // 1024 is the channel capacity, both want EVent here
 
     let http_client = client.clone();
-
     tokio::spawn(async move {
-        while let Some(event) = rx.recv().await {
+        while let Some(some_event) = rx.recv().await {
             if let Err(e) = http_client
                 .post("http://127.0.0.1:3000/publish")
-                .json(&event)
+                .json(&some_event)
                 .send()
                 .await
             {
@@ -293,48 +267,23 @@ async fn main() -> Result<()> {
     let key: u32 = 0;
     let value: u32 = std::process::id();
 
-    //Sends our edr-agent thread group id to the kernel agent_tgid map - kernel does the rest of the blocking, we've saved between 60-80% of cpu usage from this - else it was arounf 103 TwT
-
     skel.maps
     .agent_pid_map
     .update(&key.to_ne_bytes(), &value.to_ne_bytes(), MapFlags::ANY)?;
     skel.attach()?;
     let mut rb  = RingBufferBuilder::new();
+        
+
     let tx = tx.clone();
     rb.add(&skel.maps.rb, move |data| {
     let mut event = GenEvent::default();
-
+   
     if plain::copy_from_bytes(&mut event, data).is_err() {
+
         return 0;
     }
-    /*
-    println!(
-        "[RAW] type={} pid={} filename={}",
-        event.event_type,
-        event.pid,
-        convert_result_to_string(&event.filename)
-    );*/
 
-    //handle_event_type(&event);
-
-    let telemetry = TelemetryEvent {
-        event_type: event.event_type,
-        pid: event.pid,
-        ppid: event.ppid,
-        uid: event.uid,
-        gid: event.gid,
-        tgid: event.tgid,
-
-        comm: convert_result_to_string(&event.comm),
-        filename: convert_result_to_string(&event.filename),
-
-        dst_ip: event.dst_ip,
-        dst_port: event.dst_port,
-
-        time_stamp: event.time_stamp,
-    };
-
-    check_event(&event);
+    let telemetry = serde_json::to_value(make_event(&event)).unwrap();
 
     if let Err(e) = tx.try_send(telemetry) {
         eprintln!("Telemetry queue full, dropping event: {}", e);

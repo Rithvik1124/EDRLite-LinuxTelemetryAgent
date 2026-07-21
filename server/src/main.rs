@@ -5,8 +5,7 @@ use axum::{
     Router,
 };
 
-use serde::{Deserialize, Serialize};
-
+use std::collections::HashMap;
 use tokio::sync::{
     mpsc,
     Mutex,
@@ -14,33 +13,33 @@ use tokio::sync::{
 
 use std::sync::Arc;
 
-#[derive(Debug, Serialize, Deserialize)]
-struct TelemetryEvent {
-    event_type: u8,
-    pid: u32,
-    ppid: u32,
-    uid: u32,
-    gid: u32,
+// #[derive(Debug, Serialize, Deserialize)]
+// struct TelemetryEvent {
+//     event_type: u8,
+//     pid: u32,
+//     ppid: u32,
+//     uid: u32,
+//     gid: u32,
 
-    tgid: u64,
+//     tgid: u64,
 
-    comm: String,
-    filename: String,
+//     comm: String,
+//     filename: String,
 
-    dst_ip: u32,
-    dst_port: u16,
+//     dst_ip: u32,
+//     dst_port: u16,
 
-    time_stamp: u64,
-}
+//     time_stamp: u64,
+// }
 
 #[derive(Clone)]
 struct AppState {
-    sender: mpsc::Sender<TelemetryEvent>,
+    sender: mpsc::Sender<HashMap<String, String>>,
 }
 
 async fn publish(
     State(state): State<AppState>,
-    Json(event): Json<TelemetryEvent>,
+    Json(event): Json<HashMap<String, String>>,
 ) -> &'static str {
     if let Err(_) = state.sender.send(event).await {
         return "Queue is closed";
@@ -52,7 +51,7 @@ async fn publish(
 #[tokio::main]
 async fn main() {
     // Queue capable of holding 100,000 events
-    let (tx, rx) = mpsc::channel::<TelemetryEvent>(100_000);
+    let (tx, rx) = mpsc::channel::<HashMap<String, String>>(100_000);
 
     // Receiver must be shared safely
     let rx = Arc::new(Mutex::new(rx));
