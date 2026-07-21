@@ -17,9 +17,10 @@ use plain::Plain;
 use crate::detect::edr_detect_rules;
 use libbpf_rs::skel::Skel;
 use anyhow::{anyhow, bail, Context, Result};
-
+use reqwest::Client;
 use sigma_rust::{Event, Rule, event_from_json, rule_from_yaml};
-
+use serde::{Deserialize, Serialize};
+use tokio::sync::mpsc;
 //might be useful, don't remove
 //use std::fs;
 //use std::net::Ipv4Addr;
@@ -33,7 +34,7 @@ mod trial {
     include!("trial.skel.rs");
 }
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug,)]
 
 pub struct GenEvent {
     pub event_type: u8,
@@ -53,6 +54,23 @@ pub struct GenEvent {
     pub time_stamp: u64,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TelemetryEvent {     // this struct can be eliminated by adding a conversion method to GenEvent
+    pub event_type: u8,         // then we can simply call the method instead of having to assign everythin manually in main block
+    pub pid: u32,
+    pub ppid: u32,
+    pub uid: u32,
+    pub gid: u32,
+    pub tgid: u64,
+
+    pub comm: String,
+    pub filename: String,
+
+    pub dst_ip: u32,
+    pub dst_port: u16,
+
+    pub time_stamp: u64,
+}
 /*
 pub struct ProcEvent{
     pub pid: u32,
@@ -237,11 +255,28 @@ fn check_event(event: &GenEvent){
     
 }
 
-
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     println!("Proc Event Stuff:\n");
     println!("My PID: {}",std::process::id() );
     let opts = Command::from_args();
+    let client = Client::new();
+    let (tx, mut rx) = mpsc::channel::<TelemetryEvent>(1024); // 1024 is the channel capacity
+
+    let http_client = client.clone();
+
+    tokio::spawn(async move {
+        while let Some(event) = rx.recv().await {
+            if let Err(e) = http_client
+                .post("http://127.0.0.1:3000/publish")
+                .json(&event)
+                .send()
+                .await
+            {
+                eprintln!("Failed to send telemetry: {}", e);
+            }
+        }
+    });
 
     let mut skel_builder = TrialSkelBuilder::default();
 
@@ -265,7 +300,8 @@ fn main() -> Result<()> {
     .update(&key.to_ne_bytes(), &value.to_ne_bytes(), MapFlags::ANY)?;
     skel.attach()?;
     let mut rb  = RingBufferBuilder::new();
-    rb.add(&skel.maps.rb, |data| {
+    let tx = tx.clone();
+    rb.add(&skel.maps.rb, move |data| {
     let mut event = GenEvent::default();
 
     if plain::copy_from_bytes(&mut event, data).is_err() {
@@ -281,7 +317,28 @@ fn main() -> Result<()> {
 
     //handle_event_type(&event);
 
+    let telemetry = TelemetryEvent {
+        event_type: event.event_type,
+        pid: event.pid,
+        ppid: event.ppid,
+        uid: event.uid,
+        gid: event.gid,
+        tgid: event.tgid,
+
+        comm: convert_result_to_string(&event.comm),
+        filename: convert_result_to_string(&event.filename),
+
+        dst_ip: event.dst_ip,
+        dst_port: event.dst_port,
+
+        time_stamp: event.time_stamp,
+    };
+
     check_event(&event);
+
+    if let Err(e) = tx.try_send(telemetry) {
+        eprintln!("Telemetry queue full, dropping event: {}", e);
+    }
 
     0
 })?;

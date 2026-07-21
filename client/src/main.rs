@@ -1,15 +1,30 @@
-use kafka::producer::{Producer, Record};
+use reqwest::Client;
+use serde::Serialize;
 
-fn main() {
- let hosts = vec!["localhost:9092".to_owned()];
+#[derive(Serialize)]
+struct Event {
+    id: u32,
+    name: String,
+    message: String,
+}
 
- let mut producer =
-   Producer::from_hosts(hosts)
-     .create()
-     .unwrap();
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = Client::new();
 
- for i in 0..10 {
-   let buf = format!("{i}");
-   producer.send(&Record::from_value("topic-name", buf.as_bytes())).unwrap();
-   println!("Sent: {i}");
- }}
+    let event = Event {
+        id: 1,
+        name: "Alice".to_string(),
+        message: "Hello mpsc!".to_string(),
+    };
+
+    let response = client
+        .post("http://localhost:3000/publish")
+        .json(&event)
+        .send()
+        .await?;
+
+    println!("{}", response.text().await?);
+
+    Ok(())
+}
