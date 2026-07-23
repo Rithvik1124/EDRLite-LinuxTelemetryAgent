@@ -23,6 +23,8 @@ use reqwest::Client;
 use sigma_rust::{Event, Rule, event_from_json, rule_from_yaml};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
+use std::time::{SystemTime, UNIX_EPOCH};
+use libc::{clock_gettime, timespec, CLOCK_MONOTONIC};
 //might be useful, don't remove
 //use std::fs;
 //use std::net::Ipv4Addr;
@@ -165,13 +167,39 @@ fn convert_result_to_string(x: &[u8]) -> String {
     return output;
 }
 
-fn nanosec_to_timestamp(nanosec: u64) -> String {
-    let timestamp = DateTime::<Utc>::from_timestamp_nanos(nanosec as i64);
-    timestamp.format("%Y-%m-%d %H:%M:%S%.3f UTC").to_string()
+fn nanosec_to_timestamp(monotonic_ns: u64, offset_ns: i128) -> String {
+    let unix_ns = monotonic_ns as i128 + offset_ns;
+
+    let timestamp = DateTime::<Utc>::from_timestamp_nanos(unix_ns as i64);
+
+    timestamp
+        .format("%Y-%m-%d %H:%M:%S%.3f UTC")
+        .to_string()
 }
 
 
 
+fn monotonic_to_unix_offset_ns() -> i128 {
+    let unix_ns = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos() as i128;
+
+    let mut ts = timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+
+    unsafe {
+        clock_gettime(CLOCK_MONOTONIC, &mut ts);
+    }
+
+    let mono_ns =
+        ts.tv_sec as i128 * 1_000_000_000 +
+        ts.tv_nsec as i128;
+
+    unix_ns - mono_ns
+}
 
 
 /*
@@ -191,7 +219,7 @@ fn check_event(event: &GenEvent){
 
 
 
-fn make_event(buff_event: &GenEvent)-> TelemetryEvent{
+fn make_event(buff_event: &GenEvent, offset_ns: i128)-> TelemetryEvent{
     let mode :String= match buff_event.event_type {
         10 => "Execve".to_string(),
         11 => "Fork".to_string(),
@@ -225,7 +253,7 @@ fn make_event(buff_event: &GenEvent)-> TelemetryEvent{
         event.comm = cmdline;
         event.pid = buff_event.pid;
         event.filename = convert_result_to_string(&buff_event.filename);
-        event.time_stamp = nanosec_to_timestamp(buff_event.time_stamp);
+        event.time_stamp = nanosec_to_timestamp(buff_event.time_stamp, offset_ns);
         
     event
     
@@ -255,6 +283,9 @@ async fn main() -> Result<()> {
     // println!("Proc Event Stuff:\n");
     println!("My PID: {}",std::process::id() );
     let opts = Command::from_args();
+
+    let unix_offset_ns = monotonic_to_unix_offset_ns();
+
     let client = Client::new();
 
     let (tx, mut rx) = mpsc::channel::<TelemetryEvent>(1024); // 1024 is the channel capacity, both want EVent here
@@ -304,7 +335,7 @@ async fn main() -> Result<()> {
         return 0;
     }
 
-    let telemetry = make_event(&event);
+    let telemetry = make_event(&event, unix_offset_ns);
 
     if let Err(e) = tx.try_send(telemetry) {
         eprintln!("Telemetry queue full, dropping event: {}", e);
