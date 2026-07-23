@@ -13,7 +13,7 @@ use libbpf_rs::skel::OpenSkel as _;
 use libbpf_rs::MapCore;
 use libbpf_rs::MapFlags;
 use structopt::StructOpt;
-use std::string;
+use chrono::{DateTime, Utc};
 use trial::*;
 use plain::Plain;
 use crate::detect::edr_detect_rules;
@@ -35,6 +35,8 @@ use std::sync::Arc;
 mod trial {
     include!("trial.skel.rs");
 }
+
+// Timestamp doesnt work
 
 
 #[repr(C)]
@@ -58,9 +60,10 @@ pub struct GenEvent {
     pub time_stamp: u64,
 } 
 
+
 #[derive(Default, Debug, Serialize, Deserialize)]
-pub struct TelemetryEvent {     // this struct can be eliminated by adding a conversion method to GenEvent
-    pub event_type: u8,         // then we can simply call the method instead of having to assign everythin manually in main block
+pub struct TelemetryEvent {     // this struct can be eliminated by adding a conversion method to GenEvent - no, it can't
+    pub event_type: String,         
     pub pid: u32,
     pub ppid: u32,
     pub uid: u32,
@@ -70,11 +73,13 @@ pub struct TelemetryEvent {     // this struct can be eliminated by adding a con
     pub comm: String,
     pub filename: String,
 
-    pub dst_ip: u32,
-    pub dst_port: u16,
+    pub dst_ip: String, //max 15 bytes
+    pub dst_port: String, //max 5 bytes
 
-    pub time_stamp: u64,
+    pub time_stamp: String,
 } 
+
+
 /*
 pub struct ProcEvent{
     pub pid: u32,
@@ -93,11 +98,11 @@ impl Default for GenEvent {
 }
 
 
-#[repr(C)]
-#[derive(Clone, Copy)]
-struct EventHeader{
-    event_type: u8,
-}
+// #[repr(C)]
+// #[derive(Clone, Copy)]
+// struct EventHeader{
+//     event_type: u8,
+// }
 
 /*
 #[repr(C)]
@@ -160,12 +165,9 @@ fn convert_result_to_string(x: &[u8]) -> String {
     return output;
 }
 
-fn nanosec_to_24_hr(nanosec: u64) -> std::string::String{
-    let computed_millis = nanosec/1000000;
-    let ms = Millisecond::from_nanos(computed_millis);
-    return ms.pretty();
-
-    
+fn nanosec_to_timestamp(nanosec: u64) -> String {
+    let timestamp = DateTime::<Utc>::from_timestamp_nanos(nanosec as i64);
+    timestamp.format("%Y-%m-%d %H:%M:%S%.3f UTC").to_string()
 }
 
 
@@ -189,10 +191,7 @@ fn check_event(event: &GenEvent){
 
 
 
-fn make_event(buff_event: &GenEvent)-> HashMap<String, String>{
-    let cmdline = match fs::read(format!("/proc/{}/cmdline", buff_event.pid)) {
-    Ok(v) => convert_result_to_string(&v),
-    Err(_) =>"cmdline expired".to_string(), };
+fn make_event(buff_event: &GenEvent)-> TelemetryEvent{
     let mode :String= match buff_event.event_type {
         10 => "Execve".to_string(),
         11 => "Fork".to_string(),
@@ -210,33 +209,55 @@ fn make_event(buff_event: &GenEvent)-> HashMap<String, String>{
         51 => "Chmod".to_string(),  
         _=> "Unknown".to_string(), 
     };
-    let mut event = HashMap::<String, String>::new();
+    let mut event = TelemetryEvent::default();
     let cmdline = match fs::read(format!("/proc/{}/cmdline", buff_event.pid)) {
         Ok(bytes) => convert_result_to_string(&bytes),
         Err(_) => "cmdline expired".to_string(),
     };
-        event.insert("Mode".to_string(), mode);
-        event.insert("PID".to_string(), buff_event.pid.to_string());
-        event.insert("PPID".to_string(), buff_event.ppid.to_string());
-        event.insert("UID".to_string(), buff_event.uid.to_string());
-        event.insert("GID".to_string(), buff_event.gid.to_string());
-        event.insert("TGID".to_string(), buff_event.tgid.to_string());
-        event.insert("Image".to_string(), convert_result_to_string(&buff_event.filename));
-        event.insert("TimeStamp".to_string(), nanosec_to_24_hr(buff_event.time_stamp));
-        event.insert("CommandLine".to_string(), cmdline);
+        event.event_type = mode;
+        event.pid = buff_event.pid;
+        event.ppid = buff_event.ppid;
+        event.uid = buff_event.uid;
+        event.gid = buff_event.gid;
+        event.tgid = buff_event.tgid;
+        event.dst_ip = buff_event.dst_ip.to_string();
+        event.dst_port = buff_event.dst_port.to_string();
+        event.comm = cmdline;
+        event.pid = buff_event.pid;
+        event.filename = convert_result_to_string(&buff_event.filename);
+        event.time_stamp = nanosec_to_timestamp(buff_event.time_stamp);
+        
     event
     
     
 }
 
+// pub struct TelemetryEvent {     // this struct can be eliminated by adding a conversion method to GenEvent
+//     pub event_type: String,         // then we can simply call the method instead of having to assign everythin manually in main block
+//     pub pid: u32,
+//     pub ppid: u32,
+//     pub uid: u32,
+//     pub gid: u32,
+//     pub tgid: u64,
+
+//     pub comm: String,
+//     pub filename: String,
+
+//     pub dst_ip: u32,
+//     pub dst_port: u16,
+
+//     pub time_stamp: u64,
+// } 
+
+
 #[tokio::main]
 async fn main() -> Result<()> {
-    println!("Proc Event Stuff:\n");
+    // println!("Proc Event Stuff:\n");
     println!("My PID: {}",std::process::id() );
     let opts = Command::from_args();
     let client = Client::new();
 
-    let (tx, mut rx) = mpsc::channel::<serde_json::Value>(1024); // 1024 is the channel capacity, both want EVent here
+    let (tx, mut rx) = mpsc::channel::<TelemetryEvent>(1024); // 1024 is the channel capacity, both want EVent here
 
     let http_client = client.clone();
     tokio::spawn(async move {
@@ -283,7 +304,7 @@ async fn main() -> Result<()> {
         return 0;
     }
 
-    let telemetry = serde_json::to_value(make_event(&event)).unwrap();
+    let telemetry = make_event(&event);
 
     if let Err(e) = tx.try_send(telemetry) {
         eprintln!("Telemetry queue full, dropping event: {}", e);
@@ -307,4 +328,3 @@ async fn main() -> Result<()> {
 
     Ok(())
 }
-

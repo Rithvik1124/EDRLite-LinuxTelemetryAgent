@@ -4,44 +4,38 @@ use axum::{
     Json,
     Router,
 };
-
-use std::collections::HashMap;
-use tokio::sync::{
-    mpsc,
-    Mutex,
-};
-
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use tokio::sync::{mpsc, Mutex};
 
-// #[derive(Debug, Serialize, Deserialize)]
-// struct TelemetryEvent {
-//     event_type: u8,
-//     pid: u32,
-//     ppid: u32,
-//     uid: u32,
-//     gid: u32,
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+pub struct TelemetryEvent {
+    pub event_type: String,
+    pub pid: u32,
+    pub ppid: u32,
+    pub uid: u32,
+    pub gid: u32,
+    pub tgid: u64,
 
-//     tgid: u64,
+    pub comm: String,
+    pub filename: String,
 
-//     comm: String,
-//     filename: String,
+    pub dst_ip: String,
+    pub dst_port: String,
 
-//     dst_ip: u32,
-//     dst_port: u16,
-
-//     time_stamp: u64,
-// }
+    pub time_stamp: String,
+}
 
 #[derive(Clone)]
 struct AppState {
-    sender: mpsc::Sender<HashMap<String, String>>,
+    sender: mpsc::Sender<TelemetryEvent>,
 }
 
 async fn publish(
     State(state): State<AppState>,
-    Json(event): Json<HashMap<String, String>>,
+    Json(event): Json<TelemetryEvent>,
 ) -> &'static str {
-    if let Err(_) = state.sender.send(event).await {
+    if state.sender.send(event).await.is_err() {
         return "Queue is closed";
     }
 
@@ -50,52 +44,39 @@ async fn publish(
 
 #[tokio::main]
 async fn main() {
-    // Queue capable of holding 100,000 events
-    let (tx, rx) = mpsc::channel::<HashMap<String, String>>(100_000);
+    let (tx, rx) = mpsc::channel::<TelemetryEvent>(100_000);
 
-    // Receiver must be shared safely
     let rx = Arc::new(Mutex::new(rx));
 
-    // Spawn two worker tasks
     for worker_id in 0..2 {
         let rx = rx.clone();
 
         tokio::spawn(async move {
             loop {
                 let event = {
-                    let mut receiver = rx.lock().await;
-                    receiver.recv().await
+                    let mut rx = rx.lock().await;
+                    rx.recv().await
                 };
 
                 match event {
                     Some(event) => {
-                        println!(
-                            "[Worker {}] Processing: {:?}",
-                            worker_id,
-                            event
-                        );
-
-                        // Simulate Sigma processing
-                        // run_sigma(event).await;
+                        println!("[Worker {worker_id}] Processing: {event:?}");
                     }
-
                     None => break,
                 }
             }
         });
     }
 
-    let state = AppState { sender: tx };
-
     let app = Router::new()
         .route("/publish", post(publish))
-        .with_state(state);
+        .with_state(AppState { sender: tx });
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000")
         .await
         .unwrap();
 
-    println!("Server running on http://localhost:3000");
+    println!("Listening on http://localhost:3000");
 
     axum::serve(listener, app).await.unwrap();
 }
