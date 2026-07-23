@@ -1,69 +1,34 @@
 use std::fs;
 use serde_json::{json,Value};
+use std::io::Read;
 //use std::io::prelude::*;
-use crate::detect::RULES;
+use crate::detect::{SIGMA_RULES, YARA_RULES};
 use sigma_rust::{Event, Rule, event_from_json, rule_from_yaml};
+use yara_x;
 // use yaml_rust::yaml::{Hash, Yaml};
 // use yaml_rust::YamlLoader;
 
 #[warn(unused_variables)]
 
-/*
-fn load_rules(dir: &str) -> Vec<sigma_rust::Rule> {
-    let mut rules = Vec::new();
+pub fn match_yara_rule(file_dir: &str, rules: yara_x::Rules ){
+    let mut file = fs::File::open(file_dir).unwrap();    
+    let mut data = Vec::new();
+    file.read_to_end(&mut data).unwrap();
+    println!("Contents:{:?}",data);
+    let mut scanner = yara_x::Scanner::new(&rules);
 
-    for entry in fs::read_dir(dir).unwrap() {
-        let entry = entry.unwrap();
-        let path = entry.path();
+    let results = scanner.scan(&data).unwrap();
 
-        if path.extension().and_then(|s| s.to_str()) == Some("yaml") {
-            let contents = fs::read_to_string(&path).unwrap();
-            let rule = rule_from_yaml(&contents).unwrap();
-            rules.push(rule);
-        }
+    // Scan some data.
+    //let results = scanner.scan(contents.as_bytes()).unwrap();
+
+    if results.matching_rules().len() == 1{
+        println!("Matches");
     }
+}
 
-    return rules
-}*/
-
-
-/*
-
-pub fn match_rule(event_json: &Event) {
-    //let mut file = File::open(file).expect("Unable to open file");
-    //let mut contents = String::new();
-
-
-    //file.read_to_string(&mut contents)
-        //.expect("Unable to read file");
-
-    //println!("\n\n Stuff{}\n\n", contents);
-    //let rule = rule_from_yaml(&contents).unwrap();
-
-    //let docs = YamlLoader::load_from_str(&contents).unwrap();
-
-    // let event = event_from_json(r#"{"TargetFilename": "C:\\temp\\file.au3", "Image": "C:\\temp\\autoit4.exe", "Event": {"ID": 42}}"#,).unwrap();
-    //let v: Value = sigma_rust::from_str(x).unwrap();
-    let event = event_from_json(event_json);
-   
-    /*let event = event_from_json(
-        r#"{"TargetFilename": "C:\\temp\\file.au3", "Image": "C:\\temp\\autoit4.exe"}"#
-    ).unwrap();*/
-
-    match event {
-    Ok(ev) => {
-        something(&ev);
-    }
-    Err(e) => {
-        println!("Error: {:?}", e);
-    }
-    }
-
-}*/
-
-
-pub fn match_rule(event: &Event) {
-    for rule in RULES.iter() {
+pub fn match_sigma_rule(event: &Event) {
+    for rule in SIGMA_RULES.iter() {
         if rule.is_match(event) {
             println!("MATCH: {}", rule.title);
         }
