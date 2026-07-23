@@ -427,7 +427,7 @@ int trace_enter_connect(struct trace_event_raw_sys_enter *ctx)
     if (!event)
         return 0;
 
-    event->event_type = 2;
+    event->event_type = 30;
     event->pid = pid;
 
     struct sockaddr_in addr4 = {};
@@ -465,7 +465,7 @@ int trace_enter_accept(struct trace_event_raw_sys_enter *ctx)
     if (!event)
         return 0;
 
-    event->event_type = 2;
+    event->event_type = 31;
     event->pid = pid;
 
     struct sockaddr_in addr4 = {};
@@ -501,7 +501,7 @@ int trace_enter_bind(struct trace_event_raw_sys_enter *ctx)
     if (!event)
         return 0;
 
-    event->event_type = 2;
+    event->event_type = 32;
     event->pid = pid;
 
     struct sockaddr_in addr4 = {};
