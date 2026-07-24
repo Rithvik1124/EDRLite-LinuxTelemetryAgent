@@ -1,35 +1,28 @@
 use redb::{Database, TableDefinition, ReadableTable, ReadableDatabase};
 use serde::{Deserialize, Serialize};
-mod initialize_db;
-use std::{collections::HashMap, hash::{DefaultHasher, Hash, Hasher}};
+//mod initialize_db;
+use crate::telemetry::TelemetryEvent;
+use std::hash::{DefaultHasher, Hash, Hasher};
 const EVENTS_TABLE: TableDefinition<u64, &[u8]> = TableDefinition::new("events_in");
 
-// event.insert("Mode".to_string(), mode);
-// event.insert("PID".to_string(), buff_event.pid.to_string());
-// event.insert("PPID".to_string(), buff_event.ppid.to_string());
-// event.insert("UID".to_string(), buff_event.uid.to_string());
-// event.insert("GID".to_string(), buff_event.gid.to_string());
-// event.insert("TGID".to_string(), buff_event.tgid.to_string());
-// event.insert("Image".to_string(), convert_result_to_string(&buff_event.filename));
-// event.insert("TimeStamp".to_string(), nanosec_to_24_hr(buff_event.time_stamp));
-// event.insert("CommandLine".to_string(), cmdline);
 
-#[derive(Serialize, Deserialize, Hash, Debug)]
-pub struct GenEvent {
-    pub event_id: String,
-    pub event_type: u8,
-    pub pid: u32,
-    pub ppid: u32,
-    pub uid: u32,
-    pub gid: u32,
-    pub tgid: u64,
-    pub comm: String,
-    pub filename: String,
-    pub dst_ip: String,
-    pub dst_port: u16,
-    pub time_stamp: String,
-}
+// #[derive(Serialize, Deserialize, Hash, Debug)]
+// pub struct TelemetryEvent {
+//     pub event_type: String,
+//     pub pid: u32,
+//     pub ppid: u32,
+//     pub uid: u32,
+//     pub gid: u32,
+//     pub tgid: u64,
 
+//     pub comm: String,
+//     pub filename: String,
+
+//     pub dst_ip: String,
+//     pub dst_port: String,
+
+//     pub time_stamp: String,
+// }
 // impl Hash for GenEvent {
 //     fn hash<H: Hasher>(&self, state: &mut H) {
 //         self.pid.hash(state);
@@ -53,8 +46,8 @@ fn calculate_hash<T: Hash>(value: &T) -> u64 {
 
 
 
-fn write_event(event: GenEvent) -> Result<(), Box<dyn std::error::Error>>{
-    let db = crate::initialize_db::set_db()?;
+pub fn write_event(event: TelemetryEvent) -> Result<(), Box<dyn std::error::Error>>{
+    let db = crate::db::initialize_db::set_db()?;
     println!("Starting write");
     let event_id = calculate_hash(&event);
     let write_txn = db.begin_write().unwrap();
@@ -71,6 +64,7 @@ fn write_event(event: GenEvent) -> Result<(), Box<dyn std::error::Error>>{
         table.insert(event_id, &bytes.as_slice())?;
     }
     write_txn.commit()?;
+    // Ok(())
 
     let read_txn = db.begin_read()?;
     println!("Opened DB");
@@ -80,7 +74,7 @@ fn write_event(event: GenEvent) -> Result<(), Box<dyn std::error::Error>>{
     let stored_bytes = table.get(event_id)?.map(|v| v.value().to_vec());
 
     if let Some(bytes) = stored_bytes {
-        let (coffee, _): (HashMap<String, String>, usize) =
+        let (coffee, _): (TelemetryEvent, usize) =
         bincode::serde::decode_from_slice(
             &bytes,
             bincode::config::standard(),
@@ -91,21 +85,3 @@ fn write_event(event: GenEvent) -> Result<(), Box<dyn std::error::Error>>{
 
 }
 
-fn main(){
-    let mut x:HashMap<String, String> = HashMap::new();
-
-    x.insert("UID".into(), "1000".into());
-    x.insert("Image".into(), "/usr/bin/cat".into());
-    x.insert("TGID".into(), "112794431153814".into());
-    x.insert("CommandLine".into(), "cat".into());
-    x.insert("PID".into(), "26262".into());
-    x.insert("PPID".into(), "26239".into());
-    x.insert("GID".into(), "1000".into());
-    x.insert("Mode".into(), "Fork".into());
-    x.insert("TimeStamp".into(), "3ms".into());
-    if let Err(e) = write_event(x) {
-    eprintln!("Error: {e}");
-    print!("Done");
-}
-
-}

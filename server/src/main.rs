@@ -4,27 +4,31 @@ use axum::{
     Json,
     Router,
 };
+mod db;
+mod telemetry;
+use crate::telemetry::TelemetryEvent;
+mod detect;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
-pub struct TelemetryEvent {
-    pub event_type: String,
-    pub pid: u32,
-    pub ppid: u32,
-    pub uid: u32,
-    pub gid: u32,
-    pub tgid: u64,
+// #[derive(Debug, Default, Clone, Serialize, Deserialize)]
+// pub struct TelemetryEvent {
+//     pub event_type: String,
+//     pub pid: u32,
+//     pub ppid: u32,
+//     pub uid: u32,
+//     pub gid: u32,
+//     pub tgid: u64,
 
-    pub comm: String,
-    pub filename: String,
+//     pub comm: String,
+//     pub filename: String,
 
-    pub dst_ip: String,
-    pub dst_port: String,
+//     pub dst_ip: String,
+//     pub dst_port: String,
 
-    pub time_stamp: String,
-}
+//     pub time_stamp: String,
+// }
 
 #[derive(Clone)]
 struct AppState {
@@ -60,7 +64,7 @@ async fn main() {
 
                 match event {
                     Some(event) => {
-                        println!("[Worker {worker_id}] Processing: {event:?}");
+                        crate::db::events_in::write_event(event);
                     }
                     None => break,
                 }
